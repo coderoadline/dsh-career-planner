@@ -1,6 +1,6 @@
 {
   "name": "dsh-career-planner",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "type": "module",
   "description": "职业规划工作台 + 职业规划师预设：插件把包内预设自动同步到 DSH，界面与 AI 共用同一份职业数据（画像 / JD 池 / 投递 / 技能 / 简历）",
   "license": "MIT",
@@ -29,7 +29,14 @@
   "bugs": {
     "url": "https://github.com/coderoadline/dsh-career-planner/issues"
   },
-  "keywords": ["dsh", "deepseek-harness", "plugin", "career", "job-search", "resume"],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "career",
+    "job-search",
+    "resume"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

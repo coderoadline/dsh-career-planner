@@ -905,6 +905,28 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 城市串 → 城市数组。
+     * 一个岗位可能同时面向多个城市，录入时写成「北京/上海/深圳」。
+     * 筛选时它应当**同时属于**每一个城市，而不是被当成一个叫「北京/上海」的新城市。
+     * 所以这里按分隔符拆开再比对。
+     */
+    const CITY_SPLIT_RE = /[/、,，·|]/;
+    function splitCities(value, fallback = '未填') {
+      const parts = String(value ?? '')
+        .split(CITY_SPLIT_RE)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return parts.length ? parts : [fallback];
+    }
+    /** 城市命中判定：选中项与该项的**任一**城市相同即命中；空数组视为全通过 */
+    function matchCity(selected, value, fallback = '未填') {
+      const list = Array.isArray(selected) ? selected : [];
+      if (!list.length) return true;
+      const mine = splitCities(value, fallback);
+      return list.some((c) => mine.includes(c));
+    }
+
+    /**
      * 一行可点选的筛选标签（多选，再点取消）。
      * 公司 / 城市共用，保证两处交互一致。
      */
@@ -1364,12 +1386,13 @@ window.__ModuleLoader__.load({
       // 需求 4：筛选 + 搜索
       const companies = [...new Set(items.map((it) => it.company).filter(Boolean))].sort();
       // 城市可能没填，统一归到「未填」这一档，免得它变成不可筛的隐形数据
-      const cities = [...new Set(items.map((it) => it.city || '未填'))].sort();
+      // 多城市记录（「北京/上海」）计入它面向的每一个城市
+      const cities = [...new Set(items.flatMap((it) => splitCities(it.city, '未填')))].sort();
       const kw = q.trim().toLowerCase();
       const shown = items.filter((it) => {
         if (statusFilter !== 'all' && it.status !== statusFilter) return false;
         if (!matchAny(companyFilter, it.company)) return false;
-        if (!matchAny(cityFilter, it.city)) return false;
+        if (!matchCity(cityFilter, it.city)) return false;
         if (!kw) return true;
         return `${it.company || ''} ${it.title || ''} ${it.note || ''} ${it.city || ''}`
           .toLowerCase().includes(kw);
@@ -1433,7 +1456,7 @@ window.__ModuleLoader__.load({
               key: 'ci', label: '城市',
               all: cities.map((c) => ({
                 key: c, text: c,
-                count: items.filter((x) => (x.city || '未填') === c).length,
+                count: items.filter((x) => splitCities(x.city, '未填').includes(c)).length,
               })),
               selected: cityFilter,
               onToggle: (k) => setCityFilter((cur) => toggleIn(cur, k)),
@@ -1602,7 +1625,7 @@ window.__ModuleLoader__.load({
         let list = items;
         // 需求 4（新一轮）：公司 / 城市多选筛选
         if (companySel.length) list = list.filter((j) => matchAny(companySel, j.company, '未知公司'));
-        if (citySel.length) list = list.filter((j) => matchAny(citySel, j.city, '未知城市'));
+        if (citySel.length) list = list.filter((j) => matchCity(citySel, j.city, '未知城市'));
         // 需求 11：技术标签筛选
         if (techFilter) {
           list = list.filter((j) => (j.businessSkills || []).includes(techFilter));
@@ -1645,8 +1668,10 @@ window.__ModuleLoader__.load({
       const cityFacet = useMemo(() => {
         const m = new Map();
         for (const j of items) {
-          const k = j.city || '未知城市';
-          m.set(k, (m.get(k) || 0) + 1);
+          // 多城市岗位计入它面向的每一个城市（「北京/上海」同时给北京和上海 +1）
+          for (const c of new Set(splitCities(j.city, '未知城市'))) {
+            m.set(c, (m.get(c) || 0) + 1);
+          }
         }
         return [...m].sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ key: k, text: k, count: n }));
       }, [items]);

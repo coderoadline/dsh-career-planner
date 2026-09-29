@@ -20,6 +20,16 @@
   "dependencies": {
     "officeparser": "^8.0.0"
   },
+  "author": "coderoadline",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coderoadline/dsh-career-planner.git"
+  },
+  "homepage": "https://github.com/coderoadline/dsh-career-planner#readme",
+  "bugs": {
+    "url": "https://github.com/coderoadline/dsh-career-planner/issues"
+  },
+  "keywords": ["dsh", "deepseek-harness", "plugin", "career", "job-search", "resume"],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

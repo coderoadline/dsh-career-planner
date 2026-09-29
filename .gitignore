@@ -3,9 +3,8 @@ node_modules/
 package-lock.json
 
 # ── 用户职业数据（绝不应提交）────────────────────────────
-# 首次运行会把数据层播种到工作区 <工作区>/career/。
+# 首次运行会在工作区建 <工作区>/career/ 数据目录。
 # 如果工作区恰好是这个仓库目录，下面这条会挡住真实数据。
-# 注意：它只匹配名为 career 的目录，不影响 career-workbench/ 和 career-planner/。
 career/
 
 # ── 审计日志与备份 ──────────────────────────────────────
@@ -19,6 +18,11 @@ events.backup-*
 *.docx
 !test-*.pdf
 
+# ── npm 凭证（绝不应提交）───────────────────────────────
+# 仓库内可能有一个只写 registry 的 .npmrc；但若被写入 token，
+# 这条能防止它随 git 泄露。
+.npmrc
+
 # ── 编辑器 / 系统 ───────────────────────────────────────
 .vscode/
 .idea/
@@ -31,3 +35,4 @@ __ptmp/
 __release-build/
 *.log
 npm-debug.log*
+*.tgz

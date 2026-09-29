@@ -1,223 +1,212 @@
-# dsh-career-planner
+<div align="center">
 
-一套装在 **DeepSeek Harness (DSH)** 里的求职管理工具。**装一个插件即可**——预设随插件包分发，插件启动时自动同步到 DSH。
+# 🎯 dsh-career-planner
 
-| 组成 | 是什么 | 去哪 |
-|---|---|---|
-| **工作台插件** | 右侧边栏「职业规划」面板（画像 / JD 池 / 投递 / 技能 / 简历） | profile 的 `node_modules/` |
-| **职业规划师预设** | AI 的人格、工具与 8 个技能手册，**随插件包自动同步** | 自动同步到 `~/.dsh/.agent-presets/` |
-| **数据层工具** | `career_read` / `career_write`，让 AI 读写职业数据 | 随预设分发 |
+**装在 DeepSeek Harness 里的求职管理工具**
 
-## 安装（一条命令）
+把职业画像、JD 池、投递进度、技能清单、简历 —— 全塞进你的 AI 会话里。
 
-```bash
-dsh plugin --profile web add dsh-career-planner@latest
-```
+[![npm](https://img.shields.io/npm/v/dsh-career-planner?color=blue)](https://www.npmjs.com/package/dsh-career-planner)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-装完**重启 DSH**即可。插件启动时会：
+[**中文**](README.md) ｜ [English](README.en.md)
 
-1. 把包内 `presets/career-planner/` 同步到 `~/.dsh/.agent-presets/`（幂等，只覆盖自己的预设）；
-2. 把包内 `store/` 的位置广播给预设工具（`CAREER_STORE_DIR`）。
+</div>
 
-然后新建会话，在预设选择器里选「**职业规划师**」，右侧边栏出现「职业规划」面板。
+---
 
-> 从源码 / Git 安装：`dsh plugin --profile web add <git 地址或本地路径>`
+## 这是什么
+
+一个 DSH 插件，给你的求职季配一个**能对话的求职管家**（不仅限于计算机方向）。
+
+它做两件事：
+
+- **右侧边栏多一个「职业规划」面板** —— 画像 / 投递 / JD 池 / 技能 / 简历，5 个页签，点点点就能管
+- **给 AI 一个「职业规划师」预设** —— 聊天时它能直接读你的职业数据，也能往里写
+
+> 🗣️ 是的，**你和 AI 操作的是同一份数据**。你在界面上改一个投递状态，AI 下一句就知道；你跟 AI 说"我刚面完字节二面"，它写进库里，界面刷新就看得见。
+
+### 为什么做这个
+
+> 现在正是秋招，再过一年我也该秋招了 😭 ~~再不找点事做就要直面现实了~~
+> 现在计算机各个方向都在唱衰，鼠鼠非常迷茫。加上最近迷上了 DSH，就想着把它变成我的专属职业规划导师 —— 但在 DSH 社区翻了一圈，没找到相关的插件，干脆 ~~我和~~  <img src="https://avatars.githubusercontent.com/u/148330874?v=4" width="16" height="16" alt="DeepSeek"> **大肥鱼** 写了一个，边用边改。
+>
+> 目前就鼠鼠自己在用。**大概率还有没测出来的 bug** —— 毕竟是一个人写一个人测，视野有限。遇到问题欢迎提 issue，鼠鼠会尽力修。
+>
+> 后面还规划了一些功能，有机会会更新。如果这个插件帮到你了，**点个 Star 吧** ⭐ —— 你们的认可是鼠鼠继续做下去的动力 🙏
+---
 
 ## 核心设计
 
-### 代码跟插件走，数据留用户目录
+### 特色一：AI 和用户共用一个数据层
 
-它没有传统的前端/后端分离。**界面和 AI 读写的是同一份文件、同一套规则**：
+这不是"AI 插件 + 一个独立的管理界面"。**界面和 AI 走的是同一份代码、同一份文件**：
 
 ```
-你跟 AI 说话 ──→ career_write ──┐
+你跟 AI 聊天 ──→ career_write ──┐
                                 ├──→ career-store.mjs ──→ <工作区>/career/*.json
-你点界面     ──→ HTTP API ──────┘
+你点右侧面板 ──→ HTTP API ──────┘
 ```
 
-数据层代码（`store/*.mjs`）**只在插件包里，不复制到工作区**。界面（`index.js`）与
-AI 工具（`career-data-tools.js`）都从插件包加载**同一份代码**，因此共用同一条模块
-实例 —— 状态机、去重、审计、以及模块级词表缓存只有一份，界面与 AI 天然一致。
+实际体验：
 
-```
-插件包 <profile>/node_modules/dsh-career-planner/
-├── index.js  client.js  preset-sync.mjs
-├── store/                      ← 数据层代码（唯一一份）
-│   └── career-store.mjs  tech-taxonomy.mjs  resume-parse.mjs
-└── presets/
-    └── career-planner/         ← 预设（启动时同步到 ~/.dsh/.agent-presets/）
-        ├── agent.cordis.yml  preset.yml
-        ├── tools/career-data-tools.js
-        └── skills/             （8 个技能手册）
+| 你说的话 | 发生了什么 |
+|---|---|
+| 「帮我找几个大模型方向的岗位」 | AI 联网检索 → 写进 JD 池 → 面板里立刻出现 |
+| 「这个岗位我能投吗」 | AI 读你的画像 + 该 JD → 算匹配度 → 指出最大短板 |
+| 「我刚投了字节」 | AI 记进投递记录 → 面板状态自动更新 |
+| 「我想学 Rust」 | AI 评估缺口 → 排进学习路线 → 技能清单里多一条带截止日的技能 |
+| 「帮我看看简历」 | AI 读原件（**绝不修改**）→ 解析成 Markdown → 对照目标 JD 找差距 |
 
-用户工作区/
-└── career/                     ← 只有数据，首次运行自动建骨架
-    ├── jobs/ profile/ skills/ ...
-```
+### 特色二：聊天过程中自动沉淀画像
 
-> **AI 工具怎么找到数据层代码**：预设被同步到 `<DSH_HOME>/.agent-presets/`，插件包在
-> `<DSH_HOME>/profiles/<profile>/node_modules/`，两者是平行分支，裸模块名解析不到。
-> 所以插件启动时把包内 `store/` 的绝对路径写进环境变量 `CAREER_STORE_DIR`，预设工具
-> 从它加载。**这意味着插件必须启用**；未启用时 AI 工具会给出明确报错。
+这是我觉得最有意思的一点 —— **你不需要专门"填资料"**。
 
-### 预设为什么能自动安装
+你只是正常聊天：
 
-DSH 的 agent 预设只从 `<DSH_HOME>/.agent-presets/` 发现。本插件把预设打包在
-`presets/` 里，启动时同步过去（参照 `@linxin666/dsh-liangshen` 的做法）。
+> 「我是双非本，学的计算机，主要写 Java，最近在转大模型方向，投了十几家都没回音……」
 
-同步规则：
+AI 会把这些拆成**结构化的画像标签**（学历 / 技术栈 / 求职方向 / 现状），写进 `profile.json`。
 
-- **幂等**：目标与源逐字节一致就跳过；
-- **只动自己的预设**：只覆盖 `career-planner` 这一个 id，用户自己写的、别的插件
-  同步进来的预设**绝不触碰**；
-- **覆盖 + 清理**：同名预设按包内版本覆盖（升级插件重启即更新），包内没有的旧文件会被清掉。
+但它**不会把猜测当事实**。每条标签都带来源和确认状态：
 
-## 安装（手动 / 离线）
+| 来源 | 可信度 | 行为 |
+|---|---|---|
+| `user_explicit` | 你亲口说的 | 直接生效 |
+| `resume_parsed` | 从简历解析的 | 进「待确认」区，**你点了确认才算数** |
+| `ai_inferred` | AI 推断的 | 同上，必须你确认 |
 
-如果不走 `dsh plugin add`，也可以手动放（**包根就是这个仓库根**）：
+> 💡 所以 AI 越用越懂你，但**永远不会自作主张** —— 没确认的标签不参与任何正式结论。
+
+### 特色三：AI 监督你学习（而且它不会放水）
+
+学什么，不用你自己拍脑袋 —— **技能清单直接从 JD 池里长出来**。
+
+你可以手动加技能，也可以让 AI 扫一遍 JD 池，把高频要求的技能直接拉进清单。系统按难度自动排学习时间（简单 7 天 / 中等 21 天 / 困难 45 天），到期了 AI 会来考你。
+
+关键在于**这场考试是认真的**：
+
+- 技能**不能手动标"已通过"** —— 必须真的通过一次考核，这是硬校验
+- 考题由 <img src="https://avatars.githubusercontent.com/u/148330874?v=4" width="16" height="16" alt="DeepSeek"> **大肥鱼**（也就是 DeepSeek）出，答得不好就是不给过
+
+> 🐟 大肥鱼可不是讨好型豆格 ~~（此处不点名某豆包）~~，它不会因为你可怜就把"在学"改成"已通过"。
+> 想让它点头？拿真本事来。
+
+**这才是这个插件最有价值的地方**：求职路上最缺的不是信息，是**有人盯着你把该学的学完**。
+
+---
+
+## 功能一览
+
+### 📋 画像
+
+职业画像标签，按维度分组（学历 / 技术栈 / 方向 / 偏好 / 短板…）。
+
+- 彩色维度色条 + 概览统计
+- 未确认的标签单独高亮，一键确认
+- 可以手动加标签、改、删
+
+### 📮 投递
+
+投递记录 + 状态机。
+
+- 状态**只能向前**：已投递 → 笔试 → 面试 → offer（`force` 能跳级，但**不能倒退**）
+- 点错了？有「撤销上一次状态变更」
+- 按状态 / 公司筛选 + 关键词搜索
+- 每条记录带完整 timeline
+
+### 💼 JD 池
+
+岗位信息池，自动维护生命周期。
+
+- AI 联网采集，**必须带来源和链接**才让入库
+  > 💡 强烈建议配一个浏览器类插件 —— AI 才能用上你**已经登录的浏览器**去抓岗位。
+  > 推荐腾讯开源的 [**BrowserSkill**](https://github.com/Tencent/BrowserSkill)：复用真实登录态、独立窗口不打扰你、遇到验证码会喊你接管。DSH 装了它，采岗位的成功率和质量会明显好一截。
+- 15 天没更新 → 自动标记过期 → 检测链接失效 → 待删除 → 1 天宽限 → 清理
+- 链接检测**很保守**：403 / 超时都算"无法确认"，**不会误删**（招聘站反爬太常见了）
+- 每个 JD 一条「问 AI」快捷入口
+
+### 🛠️ 技能
+
+技能清单 + 考核记录。
+
+- 技能**只有两种状态**：在学 / 已通过
+- ⚠️ **不能手动标"已通过"** —— 必须真的通过一次考核（这是硬校验，防止自欺欺人）
+- 按难度自动排建议截止日（easy 7 天 / medium 21 天 / hard 45 天）
+- 快到期会提醒
+
+### 📄 简历 / 图谱
+
+- **简历原件永不修改** —— 上传的 PDF / docx 只读，解析结果写成新的 `.md`
+- 支持 docx / pdf / doc / txt / md / 图片（图片走 OCR）。解析主力是 `officeparser`，插件会自动装这个依赖；**装不上也不影响使用** —— 程序内置了零依赖的兜底解析，docx / pdf 文字版照样能读
+- 技能图谱从 JD 池自动派生，随时可重算
+
+### 🤖 AI 侧的 8 个技能
+
+预设里打包了 8 个技能手册，AI 按需加载：
+
+| 技能 | 干什么 |
+|---|---|
+| `career-profile` | 访谈式采集画像 |
+| `jd-sourcing` | 联网检索真实在招岗位 |
+| `jd-analysis` | 拆解 JD、算匹配度、判断值不值得投 |
+| `jd-tagging` | 打技术标签 + 维护会成长的词表 |
+| `resume-review` | 剖析简历、提修改建议 |
+| `interview-experience` | 联网找真实面经、给准备建议 |
+| `learning-path` | 从技能缺口生成学习路线 |
+| `direction-advice` | 评估求职方向、做取舍 |
+
+---
+
+## 安装
+
+### 方式一：从 npm 安装（推荐）
 
 ```bash
-# 1) 把仓库内容整个放进 profile 的 node_modules
-cp -r . "$DSH_HOME/profiles/web/node_modules/dsh-career-planner"
-cd "$DSH_HOME/profiles/web/node_modules/dsh-career-planner" && npm install
-
-# 2) 在 profile 的 package.json 里登记（dependencies + dsh.profile.bundles 各加一行）
-#    "dsh-career-planner": "file:node_modules/dsh-career-planner"
-
-# 3) 预设不用手动拷 —— 重启后插件会自己同步
+dsh plugin --profile web add dsh-career-planner
 ```
 
-> **`npm install` 装什么**：简历解析依赖 `officeparser`。不装也能跑，但简历的
-> **图片 / 扫描件**解析会失败（docx / pdf 有内置零依赖兜底仍可用）。
-
-> ⚠️ **插件与预设要一起装**。AI 工具的数据层代码由插件启动时提供（见「核心设计」），
-> 只装预设不启用插件时，`career_read` / `career_write` 会报
-> 「找不到职业数据层代码：环境变量 CAREER_STORE_DIR 未设置」。
-
-### 3. 指定工作区
-
-数据默认落在 DSH 的会话工作区下。**如果解析到的目录不对**，设一个环境变量显式指定：
+### 方式二：从 GitHub 安装
 
 ```bash
-# Windows PowerShell
-$env:CAREER_WORKSPACE = "D:\我的职业数据"
-
-# macOS / Linux
-export CAREER_WORKSPACE=/Users/me/career-data
+dsh plugin --profile web add github:coderoadline/dsh-career-planner
 ```
 
-插件与预设工具都优先读它。首次运行时数据目录会自动建好骨架。
 
-> 工作区里**只有数据，没有代码**。所以判断工作区是否选对，看的是该目录下有没有
-> `career/` 数据目录，而不是有没有 `.mjs`。
+### 装完
 
-### 3. 指定工作区（可选）
+**重启 DSH**。然后：
 
-数据默认落在 DSH 的会话工作区下。**如果解析到的目录不对**，设一个环境变量显式指定：
+1. 新建会话 → 预设选择器里选「**职业规划师**」
+2. 右侧边栏出现「**职业规划**」面板
 
-```bash
-# Windows PowerShell
-$env:CAREER_WORKSPACE = "D:\我的职业数据"
+首次运行时，数据目录会在你的工作区下自动建好（`<工作区>/career/`）。
 
-# macOS / Linux
-export CAREER_WORKSPACE=/Users/me/career-data
-```
+---
 
-插件与预设工具都优先读它。首次运行时数据目录会自动建好骨架。
+## 数据在哪
 
-> 工作区里**只有数据，没有代码**。所以判断工作区是否选对，看的是该目录下有没有
-> `career/` 数据目录，而不是有没有 `.mjs`。
-
-## 目录结构
-
-> **包根 = 仓库根。** `package.json` 必须在根目录，`dsh plugin add` 才能识别为插件包。
-
-```
-dsh-career-planner/                 # ← npm/git 包根 = 仓库根
-├── package.json                    # ★ 含 dsh.bundle.patch + dsh.client（必须在根）
-├── index.js                        # Host 半边：HTTP 路由、工作区解析、广播 store 路径、同步预设
-├── client.js                       # Client 半边：右侧边栏面板的 5 个 Tab
-├── preset-sync.mjs                 # 把包内 presets/ 同步到 <DSH_HOME>/.agent-presets/
-├── cordis.patch.yml                # 插件挂载补丁
-├── store/                          # ★ 数据层代码（唯一一份，界面与 AI 共用）
-│   ├── career-store.mjs            # 所有业务规则：状态机、去重、排期、审计、打标、图谱
-│   ├── tech-taxonomy.mjs           # 技术词表：同义词归并、配色
-│   └── resume-parse.mjs            # 简历 → Markdown（officeparser 主力 + 零依赖兜底）
-├── presets/                        # ★ 预设（随包分发，启动时自动同步）
-│   └── career-planner/
-│       ├── agent.cordis.yml        # AI 人格 + 加载哪些工具/技能
-│       ├── preset.yml              # 显示名「职业规划师」与描述
-│       ├── tools/
-│       │   └── career-data-tools.js   # career_read / career_write
-│       └── skills/                 # 8 个技能手册
-│           ├── career-profile/  jd-analysis/   jd-sourcing/   jd-tagging/
-│           └── resume-review/   learning-path/ interview-experience/ direction-advice/
-└── README.md  LICENSE  .gitignore
-```
-
-## 数据目录
-
-首次运行后，工作区下会出现：
+所有数据都在**你的工作区**里，纯 JSON，随时可以拷走或备份：
 
 ```
 <工作区>/career/
-├── profile/profile.json         # 职业画像标签（机读权威）
-├── jobs/jobs.json               # JD 信息池
+├── profile/profile.json         # 职业画像
+├── jobs/jobs.json               # JD 池
 ├── applications/applications.json
 ├── skills/skills.json
 ├── graph/skill-graph.json       # 技能图谱（自动生成）
-├── resumes/                     # 简历原件（永不修改）
-└── logs/events.jsonl            # 变更审计日志（只追加）
+├── resumes/                     # 简历原件（只读）
+└── logs/events.jsonl            # 审计日志（只追加）
 ```
-
-三条不可违背的规则：
-
-1. **`*.json` 是机读权威，`*.md` 是它的投影** —— 改数据改 json。
-2. **简历原件永不被修改** —— 解析结果写成新文件。
-3. **审计日志只追加** —— 每条标签是谁、何时、是否经你确认都查得到。
-
-## 四条业务铁律
-
-1. **AI 推断的东西必须用户确认** —— `ai_inferred` / `resume_parsed` 来源的标签一律
-   `confirmed: false`，不参与正式结论。
-2. **技能不能直接标"已通过"** —— 必须真的通过一次考核。
-3. **简历原件永不被修改。**
-4. **投递状态只能前进** —— `force: true` 能跳级但不能倒退，撤销只能走 `undoApplicationStatus()`。
-
-## 环境变量
-
-| 变量 | 作用 |
-|---|---|
-| `CAREER_WORKSPACE` | 显式指定工作区根目录（**最可靠**，路径解析出错时用它） |
-| `CAREER_STORE_DIR` | 插件包内 `store/` 的绝对 `file://` URL。**由插件启动时自动写入**，供预设工具加载数据层；一般不用手填 |
-| `DSH_HOME` | DSH 主目录。插件据此定位 `.agent-presets/` 做预设同步；一般不用手填（默认 `~/.dsh`） |
+---
 
 ## 排错
 
-**症状：改了代码没生效**
-数据层代码与 `index.js` 被 Node 缓存在内存里 —— 改完**必须重启 DSH**。
-只改 `client.js` 刷新浏览器即可。
+**AI 报「找不到职业数据层代码」**
+插件没启用。AI 工具的数据层代码由插件提供，两者必须一起装。
 
-**症状：预设选择器里没有「职业规划师」**
-插件启动时的预设同步没成功。检查：
-
-1. `~/.dsh/.agent-presets/career-planner/agent.cordis.yml` 是否存在；
-2. DSH 启动日志里有没有 `[dsh-career-planner] 预设同步` 相关告警；
-3. 插件包内 `presets/career-planner/` 是否完整（`npm` 发布时若漏了 `files` 白名单就会缺）。
-
-**症状：AI 报「找不到职业数据层代码：环境变量 CAREER_STORE_DIR 未设置」**
-工作台插件没启用。预设工具的数据层代码由插件提供，两者要一起装。确认
-`dsh-career-planner` 在当前 profile 的 `node_modules` 里并已启用，然后重启 DSH。
-
-**症状：AI 报「CAREER_STORE_DIR 指向的目录里没有 career-store.mjs」**
-插件包安装不完整，`store/` 目录缺文件。重装插件。
-
-**症状：数据写到了奇怪的目录（比如桌面）**
-不是数据坏了，是**工作区解析错了**。设 `CAREER_WORKSPACE` 指向真实工作区。
-
-**症状：简历图片/扫描件解析失败**
-`officeparser` 没装。进插件目录 `npm install`，或把文字复制成 `.txt` 再上传。
+---
 
 ## License
 
-MIT —— 见 [LICENSE](LICENSE)。
+[MIT](LICENSE)

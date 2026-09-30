@@ -25,12 +25,81 @@
  */
 
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
 
 /** 本插件拥有的预设 id —— 只有这些目录会被同步/覆盖/清理。 */
 export const OWNED_PRESET_IDS = ['career-planner'];
+
+/** 全局数据目录名。放在插件包**之外**，这样更新插件不会覆盖用户数据。 */
+export const DATA_DIR_NAME = 'dsh-career-planner-data';
+
+/**
+ * 全局数据目录的候选根（按优先级）。
+ *
+ * 为什么不用会话工作区：工作区随会话变化，用户会看到"数据不见了"；
+ * 而放在插件包内又会被 `dsh plugin add` 整体替换掉。所以固定放一个外部目录。
+ *
+ * 优先级：E → D → 其它非 C 盘 → C（C 通常是系统盘，可用空间最紧张）。
+ * 非 Windows 没有盘符概念，直接用用户目录。
+ *
+ * @param {string} [platform] 平台（测试注入用）
+ * @returns {string[]} 绝对路径候选
+ */
+export function dataRootCandidates(platform = process.platform, home = homedir()) {
+  const name = DATA_DIR_NAME;
+  // 非 Windows 没有盘符；直接用用户目录。
+  // 注意用正斜杠拼接 —— 在 Windows 上跑 path.join('/Users/me', x) 会产出
+  // '\Users\me\x'，把 POSIX 绝对路径毁掉。
+  if (platform !== 'win32') return [`${home.replace(/\/+$/, '')}/${name}`];
+
+  const drives = [];
+  // E 优先，其次 D，再是其它非 C 盘，最后 C
+  for (const letter of ['E', 'D']) drives.push(`${letter}:\\`);
+  for (const letter of 'FGHIJKLMNOPQRSTUVWXYZ') drives.push(`${letter}:\\`);
+  drives.push('C:\\');
+
+  return drives.map((d) => join(d, name));
+}
+
+/**
+ * 解析全局数据根目录（供 `CareerStore` 当 workspaceRoot 用）。
+ *
+ * 语义：
+ *   1. `CAREER_WORKSPACE` 环境变量显式指定 → 直接用（用户/测试的逃生口）
+ *   2. 任一候选目录**已存在** → 用它（不新建、不搬家，保证数据不丢）
+ *   3. 都不存在 → 按优先级在第一个**可写**的盘上创建
+ *   4. 全失败 → 用户目录下的同名目录兜底
+ *
+ * @param {NodeJS.ProcessEnv} [env] 环境变量（测试注入用）
+ * @param {string} [platform] 平台（测试注入用）
+ * @param {string} [home] 用户目录（测试注入用）
+ * @returns {string} 绝对路径
+ */
+export function resolveDataRoot(env = process.env, platform = process.platform, home = homedir()) {
+  const explicit = env && env.CAREER_WORKSPACE;
+  if (explicit !== undefined && String(explicit).trim() !== '') {
+    return resolve(String(explicit).trim());
+  }
+
+  const candidates = dataRootCandidates(platform, home);
+
+  // ① 已存在的直接复用
+  for (const dir of candidates) {
+    try { if (existsSync(dir)) return dir; } catch { /* 盘不可访问，跳过 */ }
+  }
+  // ② 都不存在 → 建第一个能建的
+  for (const dir of candidates) {
+    try { mkdirSync(dir, { recursive: true }); return dir; } catch { /* 无权限或盘不存在，试下一个 */ }
+  }
+  // ③ 兜底：用户目录下的同名目录（C 盘根通常没写权限，所以用家目录）
+  const fallback = platform === 'win32'
+    ? join(home, DATA_DIR_NAME)
+    : dataRootCandidates(platform, home)[0];
+  try { mkdirSync(fallback, { recursive: true }); } catch { /* 交给下游报错 */ }
+  return fallback;
+}
 
 /**
  * 解析 DSH home 目录。

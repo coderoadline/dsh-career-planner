@@ -72,37 +72,26 @@ export function apply(ctx) {
 // ───────────────────────────── 工作区解析 ─────────────────────────────
 
 /**
- * 解析工作区根目录（**数据**所在处；代码在插件包里，不在这里）。
- * 不能用 process.cwd()（那是 Harness 启动目录，不是会话工作区）。
- * 优先 CAREER_WORKSPACE 环境变量，其次 workspaceRegistry 里含 career/ 数据目录的
- * 已注册工作区。
+ * 解析数据根目录（**数据**所在处；代码在插件包里，不在这里）。
+ *
+ * 与工作台插件（index.js）共用同一个约定，保证界面与 AI 指向同一份数据：
+ *   1. `CAREER_WORKSPACE` —— 用户/测试显式指定（最高优先）
+ *   2. `CAREER_DATA_DIR`  —— 工作台插件启动时广播的全局数据目录
+ *   3. 都没有 → 报错（插件没启用，数据层本来就加载不了）
  */
 async function workspaceRoot(ctx) {
-  const env = process.env.CAREER_WORKSPACE;
-  if (env && String(env).trim()) return String(env).trim();
+  const explicit = process.env.CAREER_WORKSPACE;
+  if (explicit && String(explicit).trim()) return String(explicit).trim();
 
-  const { existsSync } = await import('node:fs');
-  const { join } = await import('node:path');
+  const fromPlugin = process.env.CAREER_DATA_DIR;
+  if (fromPlugin && String(fromPlugin).trim()) return String(fromPlugin).trim();
 
-  const candidates = [];
-  try {
-    const reg = ctx && ctx.get ? ctx.get('workspaceRegistry') : null;
-    if (reg && typeof reg.list === 'function') {
-      for (const w of reg.list()) {
-        if (w && typeof w.path === 'string' && w.path.trim()) candidates.push(w.path);
-      }
-    }
-  } catch { /* 忽略 */ }
-  try { candidates.push(process.cwd()); } catch { /* 忽略 */ }
-
-  const seen = new Set();
-  for (const c of candidates) {
-    const k = String(c).toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    if (existsSync(join(c, 'career'))) return c;
-  }
-  return candidates[0] || '.';
+  throw new Error(
+    '找不到职业数据目录：环境变量 CAREER_DATA_DIR 未设置。\n'
+    + '它由「职业规划工作台」插件（dsh-career-planner）在启动时写入。'
+    + '请确认该插件已在当前 profile 启用并重启 DSH；'
+    + '或手动设置 CAREER_WORKSPACE 指向你的数据目录。'
+  );
 }
 
 /**

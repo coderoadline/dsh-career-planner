@@ -39,7 +39,7 @@
 
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { join, resolve, dirname } from 'node:path';
-import { syncPresetTrees, resolveDshHome, OWNED_PRESET_IDS } from './preset-sync.mjs';
+import { syncPresetTrees, resolveDshHome, resolveDataRoot, DATA_DIR_NAME, OWNED_PRESET_IDS } from './preset-sync.mjs';
 
 const ROUTE_PATH = '/dsh-career-planner/api';
 
@@ -108,52 +108,29 @@ function explicitWorkspace() {
 }
 
 /**
- * 解析工作区根目录。
+ * 解析数据根目录。
  *
- * ⚠️ 不能用 process.cwd() —— 插件进程的 cwd 是 Harness 的启动目录
- *    （曾解析成 <用户桌面>），而不是会话工作区。
+ * 数据放在插件包**之外**的全局目录（`<盘>:/dsh-career-planner-data`，
+ * E → D → 其它非 C 盘 → C 优先），理由：
+ *   · 放在插件包内 → `dsh plugin add/remove` 会整体替换掉，**用户数据会丢**
+ *   · 放在会话工作区 → 工作区随会话变化，用户会以为"数据不见了"
  *
- * 正确做法：从 workspaceRegistry 拿真实的已注册工作区路径。
- * 注意这里**不再要求候选工作区已经含 career/career-store.mjs** —— 代码已经不在
- * 工作区了，只要求有 career/ 数据目录；首次安装时连数据都没有，会由 store.init()
- * 建出骨架。
+ * 结果同时广播到 `CAREER_DATA_DIR`，供预设工具复用（保证界面与 AI 指向同一目录）。
  */
-let rootCtx = null;
+const DATA_DIR_ENV = 'CAREER_DATA_DIR';
+
+function publishDataDir() {
+  const existing = process.env[DATA_DIR_ENV];
+  if (existing && String(existing).trim()) return String(existing).trim();
+  const dir = resolveDataRoot();
+  process.env[DATA_DIR_ENV] = dir;
+  return dir;
+}
 
 async function workspaceRoot() {
   const explicit = explicitWorkspace();
   if (explicit) return explicit;
-
-  const candidates = [];
-  try {
-    const reg = rootCtx && rootCtx.get ? rootCtx.get('workspaceRegistry') : null;
-    if (reg && typeof reg.list === 'function') {
-      for (const w of reg.list()) {
-        if (w && typeof w.path === 'string' && w.path.trim()) candidates.push(w.path);
-      }
-    }
-  } catch { /* 忽略，走回退 */ }
-
-  // 回退：进程 cwd（尽力而为）
-  try { candidates.push(process.cwd()); } catch { /* 忽略 */ }
-
-  // 已注册工作区优先，逐个找真正可用的那个
-  const { existsSync } = await import('node:fs');
-  const seen = new Set();
-  const uniq = [];
-  for (const c of candidates) {
-    const key = String(c).toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    uniq.push(String(c));
-  }
-
-  // ① 已经有职业数据目录的优先（说明这里就是本工具的工作区）
-  for (const c of uniq) {
-    if (existsSync(join(c, 'career'))) return c;
-  }
-  // ② 否则用第一个候选；首次运行由 store.init() 建出数据骨架
-  return uniq[0] || resolve('.');
+  return publishDataDir();
 }
 
 async function loadStore() {
@@ -521,11 +498,11 @@ async function probeLink(url) {
 // ───────────────────────────── 插件入口 ─────────────────────────────
 
 export function apply(ctx) {
-  // 记下根 context，供 workspaceRoot() 查询已注册工作区
-  rootCtx = ctx;
-
   // 把包内 store/ 的位置广播给预设工具（必须在任何 loadStore() 之前）
   publishStoreDir();
+
+  // 把全局数据目录广播给预设工具，保证界面与 AI 指向同一份数据
+  publishDataDir();
 
   // 把包内预设同步到 <DSH_HOME>/.agent-presets/，用户无需手动拷贝。
   // 幂等，且只覆盖本插件拥有的预设 id。失败只告警，不阻断启动。

@@ -2501,7 +2501,7 @@ window.__ModuleLoader__.load({
                         const diffZh = s.difficulty === 'hard' ? '困难' : s.difficulty === 'easy' ? '简单' : '中等';
                         const text = `帮我考核「${s.name}」这个技能。\n`
                           + `这个技能我标的难度是**${diffZh}**，请按${diffZh}难度出题（不要出得太简单或太偏），`
-                          + `出 3-5 道由浅入深的题，我答完后：\n`
+                          + `你要像一个技术面试官一样，可以结合实际JD池的相关JD要求和画像，不断地给我出题，你出一道，我答一道，可以追问。直到达到可以开始评分的标准，最多10道题或用户提出结束：\n`
                           + `1) 按 100 分制打分并给出「通过/未通过」；\n`
                           + `2) 调 career_write 的 record_exam 写回：每题记 {q,answer,feedback}、`
                           + `整体给 score、advice、weakPoints、passed；\n`
